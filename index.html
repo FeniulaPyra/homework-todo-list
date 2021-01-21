@@ -1,0 +1,191 @@
+<!DOCTYPE HTML>
+<html>
+	<head>
+		<link rel="preconnect" href="https://fonts.gstatic.com">
+		<link href="https://fonts.googleapis.com/css2?family=Exo&display=swap" rel="stylesheet">
+		
+		<script src="https://www.gstatic.com/firebasejs/8.0.2/firebase-app.js"></script>
+		<script src="https://www.gstatic.com/firebasejs/8.0.2/firebase-auth.js"></script>
+		<script src="https://www.gstatic.com/firebasejs/8.0.2/firebase-database.js"></script>
+		<script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+		
+		<script src="src/loader.js" type="module"></script>
+		
+		<meta content="width=device-width, initial-scale=1" name="viewport" />
+		<meta charset="utf-8">
+		<link rel="stylesheet" href="default-styles/index-styles.css">
+		<title>Homework Tool</title>
+	</head>
+	<body>
+		<main>
+		<h2 id="info">
+			{{appStatus}}
+		</h2>
+		<div id="menus">
+			<aside id="main">
+				<div id="controls">
+					<h3 id="userInfo" >Logged in as: {{ user.name }}</h3>
+					<button v-on:click="googleLogin">Login with Google</button>
+					<button v-on:click="startAddHW">Add Homework</button>
+					<button v-on:click="startAddClass">Add Class</button>
+					
+					<h3>Show Classes:</h3>
+					<button v-on:click="selectAllFilters">Select All Classes</button>
+					<div id="classFilters">
+						<div v-for="clss in classKeys" 
+							 v-bind:data-time="classes[clss].time"
+							 v-bind:data-room="classes[clss].room"
+							 v-bind="classes[clss].days"
+							 v-bind:style="{background: classes[clss].color}"
+							 >
+							<input type="checkbox" class="classFilter" 
+								   v-bind:id="clss" 
+								   v-on:click="filterByClassElement" 
+								   checked
+								   >
+								   <!---v-bind:checked="clss.selected"--->
+							<label v-bind:for="clss">{{classes[clss].name}}</label>
+							<button v-on:click="editClass">Edit/View</button>
+						</div>
+					</div>
+					
+					<h3>Other Filters</h3>
+					<div id="filters">
+						<span>
+							<!--v-on:change="showHideCompleted"-->
+							<input type="checkbox" id="showCompletedHW" v-model="showCompletedHWs">
+							<label for="showCompletedHW">Show Completed HW</label>
+						</span>
+					</div>
+					
+					
+					<h3>Sorting Priority:</h3>
+					<ol id="sorts">
+						<li v-for="sortItem of sortOrder">
+							<button v-on:click="sort" v-bind:id="sortItem">+</button>
+							<button v-on:click="sort" v-bind:id="sortItem">-</button>
+							{{sortItem}}
+						</li>
+					</ol>
+					<h3>Date Format</h3>
+					<select v-model="dateFormat">
+						<option value="m/d/Y">mm/dd/yyyy</option>
+						<option value="d/m/Y">dd/mm/yyyy</option>
+						<option value="F d, Y">Month Day, Year</option>
+						<option value="d F Y">Day Month Year</option>
+					</select>
+					
+					<h3>Time Format</h3>
+					<select v-model="timeFormat">
+						<option value="g:ia">12hr</option>
+						<option value="H:i">24hr</option>
+					</select>
+				</div>
+				<div id="monster">
+					<div id="monsterInfo">
+						<h2>Monster</h2>
+						<h3>{{monster.name}}</h3>
+						<p>HP: {{monster.hp}}/{{monster.exp}}</p>
+						<input type="range" v-bind:min=0 v-bind:max="monster.exp"  v-model="monster.hp" disabled>
+					</div>
+					<div id="reward">
+						<h3>REWARD: </h3>
+						<p>
+							<br>{{monster.reward.name}}
+							<br>Damage Dice: {{monster.reward.dmgMultiplier}}d{{monster.reward.maxDmg}}
+							<button v-on:click="reward(true)" v-bind:style="{visibility: showAcceptReward}">Equip New Weapon</button>
+							<button v-on:click="reward(false)" v-bind:style="{visibility: showAcceptReward}">Keep Current Weapon</button>
+
+						</p>
+					</div>
+					<hr>
+					<div id="userInfo">
+						<h3>You: {{user.name}}</h3>
+						<h4>Gold: {{user.gold}}</h4>
+						<h4>Exp: {{user.exp}}</h4>
+						<p>Weapon: {{user.weapon.name}}
+							<br>Damage Dice: {{user.weapon.dmgMultiplier}}d{{user.weapon.maxDmg}}
+						</p>
+					</div>
+				</div>
+			</aside>
+			<aside id="addHW">
+				<h3>Assignment Name*</h3>
+				<p>(MUST begin with a letter)</p>
+				<span><input type="text" id="hwNameTextbox" placeholder="name" v-model="hw.name" v-on:input="isHWFormValid"></span>
+				<br>
+				
+				<h3>Select Class*</h3>
+				<select id="classSelect" v-model="hw.classKey">
+					<option v-for="clss in classKeys" v-bind:value="clss">{{classes[clss].name}}</option>
+				</select>
+				<br>
+				
+				<h3>Due*</h3>
+				<span>
+					<input type="date" v-model="hw.date" v-on:input="isHWFormValid">
+					<input type="time" v-model="hw.time" v-on:input="isHWFormValid">
+				</span>
+				<br>
+				
+				<h3>Priority (1 is high)</h3>
+				<span><input id="priorityInput" type="number" min=1 max=10 placeholder=3 v-model="hw.priority">/10</span>
+				<br>
+				
+				<input type="text" id="hwKey" style="display: none;" v-model="hwKey" disabled>
+				
+				<span>
+					<button v-on:click="showMainForm(); resetHWForm();">Cancel</button>
+					<button id="deleteHW" v-on:click="deleteHW(); showMainForm(); resetHWForm();" style="display: none">Delete</button>
+					<button id="addNewHW" v-on:click="addHW(); showMainForm(); resetHWForm();" v-bind:disabled="hwFormInvalid">Add Homework</button>
+					<button id="updateHW" v-on:click="updateHW(); showMainForm(); resetHWForm();" style="display: none">Update Homework</button>
+				</span>
+			</aside>
+			
+			<aside id="addClass">
+				<input type="text" placeholder="Name" v-model="classInfo.name" v-on:input="isClassFormValid" id="className">
+				
+				Color code: <input type="color" v-model="classInfo.color" >
+				
+				<input type="text" placeholder="Building" v-model="classInfo.building" id="classBuilding">
+				<input type="text" placeholder="Room" v-model="classInfo.room" id="classRoom">
+				
+				<input type="time" v-model="classInfo.time">
+				
+				<span><input type="checkbox" id="monday" v-model="classInfo.days.monday"><label for="monday">Monday</label></span>
+				<span><input type="checkbox" id="tuesday" v-model="classInfo.days.tuesday"><label for="tuesday">Tuesday</label></span>
+				<span><input type="checkbox" id="wednesday" v-model="classInfo.days.wednesday"><label for="wednesday">Wednesday</label></span>
+				<span><input type="checkbox" id="thursday" v-model="classInfo.days.thursday"><label for="thursday">Thursday</label></span>
+				<span><input type="checkbox" id="friday" v-model="classInfo.days.friday"><label for="friday">Friday</label></span>
+				<span><input type="checkbox" id="saturday" v-model="classInfo.days.saturday"><label for="saturday">Saturday</label></span>
+				<span><input type="checkbox" id="sunday" v-model="classInfo.days.sunday"><label for="sunday">Sunday</label></span>
+				<span>
+					<button v-on:click="showMainForm(); resetClassForm();">Cancel</button>
+					<button id="deleteClass" v-on:click="deleteClass(); showMainForm(); resetClassForm();" style="display:none;">Delete (also deletes class HW's!)</button>
+					<button id="addNewClass" v-on:click="addClass(); showMainForm(); resetClassForm();" v-bind:disabled="classFormInvalid">Add Class</button>
+					<button id="updateClass" v-on:click="updateClass(); showMainForm(); resetClassForm();" style="display:none" v-bind:disabled="classFormInvalid">Update Class</button>
+				</span>
+			</aside>
+		</div>
+		<div id="todolist">
+			<div class="hwli" v-for="h in hwKeys"
+					v-bind:style="{background: classes[hws[h].classKey].color, 'border-left-color': getPriorityColor(hws[h].priority), display: canShowHW(hws[h].completed)}"
+					v-bind:data-key="h"
+					v-bind:data-priority="hws[h].priority"
+					v-bind:id="hws[h].classKey"
+				   	v-bind:hwclass="hws[h].classKey"
+				 	v-bind:data-completed="hws[h].completed"
+				 	v-bind:data-time="hws[h].time"
+				 	v-bind:data-date="hws[h].date"
+				 	v-on:click="completeHW"
+				>
+				<h2>{{hws[h].name}}</h2>
+				<!--updated to let classes go by key instead of name-->
+				<p>{{classes[hws[h].classKey].name}}</p>
+				<h4>{{formattedDate(hws[h].date + " " + hws[h].time)}}<br>{{formattedTime(hws[h].date + " " + hws[h].time)}}</h4>
+				<button v-on:click="editHW">Edit</button>
+			</div>
+		</div>
+		</main>
+	</body>
+</html>
